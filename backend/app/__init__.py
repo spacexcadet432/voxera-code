@@ -1,0 +1,1 @@
+# Voxera FastAPI application package

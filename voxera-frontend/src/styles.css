@@ -1,0 +1,167 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-cyan: var(--cyan);
+  --color-cyan-glow: var(--cyan-glow);
+  --color-electric: var(--electric);
+  --color-glass: var(--glass);
+  --color-glass-border: var(--glass-border);
+}
+
+:root {
+  --radius: 0.875rem;
+
+  /* Voxera — cinematic dark futuristic */
+  --background: oklch(0.13 0.02 250);
+  --foreground: oklch(0.96 0.01 230);
+
+  --card: oklch(0.17 0.025 250);
+  --card-foreground: oklch(0.96 0.01 230);
+  --popover: oklch(0.16 0.025 250);
+  --popover-foreground: oklch(0.96 0.01 230);
+
+  --primary: oklch(0.78 0.18 220);
+  --primary-foreground: oklch(0.10 0.02 250);
+  --secondary: oklch(0.22 0.03 250);
+  --secondary-foreground: oklch(0.96 0.01 230);
+  --muted: oklch(0.20 0.025 250);
+  --muted-foreground: oklch(0.65 0.04 230);
+  --accent: oklch(0.72 0.20 200);
+  --accent-foreground: oklch(0.10 0.02 250);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.30 0.04 230 / 30%);
+  --input: oklch(0.25 0.03 250 / 60%);
+  --ring: oklch(0.78 0.18 220);
+
+  /* Voxera bespoke tokens */
+  --cyan: oklch(0.82 0.18 210);
+  --cyan-glow: oklch(0.85 0.22 200);
+  --electric: oklch(0.70 0.25 260);
+  --glass: oklch(0.20 0.03 245 / 45%);
+  --glass-border: oklch(0.78 0.18 220 / 18%);
+
+  /* Gradients */
+  --gradient-orb: radial-gradient(
+    circle at 35% 30%,
+    oklch(0.92 0.18 200) 0%,
+    oklch(0.70 0.22 220) 28%,
+    oklch(0.45 0.20 260) 60%,
+    oklch(0.18 0.05 260) 100%
+  );
+  --gradient-bg: radial-gradient(
+    ellipse at 20% 10%,
+    oklch(0.20 0.06 240 / 55%) 0%,
+    transparent 55%
+  ),
+  radial-gradient(
+    ellipse at 80% 90%,
+    oklch(0.22 0.08 260 / 45%) 0%,
+    transparent 60%
+  );
+
+  /* Glows */
+  --glow-cyan: 0 0 40px oklch(0.85 0.22 200 / 35%),
+               0 0 80px oklch(0.70 0.22 220 / 25%);
+  --glow-soft: 0 0 24px oklch(0.78 0.18 220 / 25%);
+  --shadow-glass: 0 8px 32px oklch(0.05 0.02 250 / 60%),
+                  inset 0 1px 0 oklch(1 0 0 / 5%);
+}
+
+.dark {
+  /* Same as root — app is dark by default */
+  --background: oklch(0.13 0.02 250);
+  --foreground: oklch(0.96 0.01 230);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    background-image: var(--gradient-bg);
+    background-attachment: fixed;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: oklch(0.78 0.18 220 / 35%);
+    color: var(--color-foreground);
+  }
+}
+
+@layer utilities {
+  .glass {
+    background-color: var(--glass);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glow-cyan { box-shadow: var(--glow-cyan); }
+  .glow-soft { box-shadow: var(--glow-soft); }
+
+  .text-gradient-cyan {
+    background: linear-gradient(135deg, var(--cyan-glow), var(--electric));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .grid-overlay {
+    background-image:
+      linear-gradient(oklch(0.78 0.18 220 / 5%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.78 0.18 220 / 5%) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  @keyframes voxera-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.04); opacity: 1; }
+  }
+
+  @keyframes voxera-drift {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(40px, -30px); }
+  }
+
+  .animate-voxera-pulse { animation: voxera-pulse 3.5s ease-in-out infinite; }
+  .animate-voxera-drift { animation: voxera-drift 18s ease-in-out infinite; }
+}
