@@ -4,16 +4,24 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.state.settings import get_settings
+from app.utils.keys import resolve_verify_key
+
 router = APIRouter(prefix="/api/verify", tags=["verify"])
 
 
 class KeyBody(BaseModel):
-    apiKey: str = Field(min_length=1, max_length=8192)
+    apiKey: str = Field(default="", max_length=8192)
 
 
 @router.post("/openai")
 async def verify_openai(body: KeyBody) -> dict[str, bool | str]:
-    headers = {"Authorization": f"Bearer {body.apiKey}"}
+    settings = get_settings()
+    key = resolve_verify_key(body.apiKey, settings.openai_api_key, settings=settings)
+    if not key:
+        return {"ok": False, "error": "No OpenAI key provided and OPENAI_API_KEY is not set on the server."}
+
+    headers = {"Authorization": f"Bearer {key}"}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=10.0)) as client:
             resp = await client.get("https://api.openai.com/v1/models", headers=headers)
@@ -31,7 +39,12 @@ async def verify_openai(body: KeyBody) -> dict[str, bool | str]:
 
 @router.post("/deepgram")
 async def verify_deepgram(body: KeyBody) -> dict[str, bool | str]:
-    headers = {"Authorization": f"Token {body.apiKey}"}
+    settings = get_settings()
+    key = resolve_verify_key(body.apiKey, settings.deepgram_api_key, settings=settings)
+    if not key:
+        return {"ok": False, "error": "No Deepgram key provided and DEEPGRAM_API_KEY is not set on the server."}
+
+    headers = {"Authorization": f"Token {key}"}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=10.0)) as client:
             resp = await client.get("https://api.deepgram.com/v1/projects", headers=headers)
@@ -47,7 +60,12 @@ async def verify_deepgram(body: KeyBody) -> dict[str, bool | str]:
 
 @router.post("/elevenlabs")
 async def verify_elevenlabs(body: KeyBody) -> dict[str, bool | str]:
-    headers = {"xi-api-key": body.apiKey}
+    settings = get_settings()
+    key = resolve_verify_key(body.apiKey, settings.elevenlabs_api_key, settings=settings)
+    if not key:
+        return {"ok": False, "error": "No ElevenLabs key provided and ELEVENLABS_API_KEY is not set on the server."}
+
+    headers = {"xi-api-key": key}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=10.0)) as client:
             resp = await client.get("https://api.elevenlabs.io/v1/user", headers=headers)

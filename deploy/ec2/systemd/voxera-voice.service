@@ -1,0 +1,31 @@
+[Unit]
+Description=Voxera FastAPI voice backend (Gunicorn + Uvicorn worker)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/voxera/backend
+EnvironmentFile=-/etc/voxera/voxera.env
+Environment=PYTHONUNBUFFERED=1
+
+# Single worker: WebSockets are pinned to one process. Scale vertically (bigger instance) before adding machines.
+ExecStart=/opt/voxera/backend/.venv/bin/gunicorn app.main:app \
+  -k uvicorn.workers.UvicornWorker \
+  -w 1 \
+  -b 127.0.0.1:8000 \
+  --timeout 120 \
+  --graceful-timeout 60 \
+  --access-logfile - \
+  --error-logfile -
+
+Restart=always
+RestartSec=5
+
+# Hardening (optional; relax if you hit permission issues)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

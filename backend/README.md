@@ -5,7 +5,7 @@ Python service that powers the browser voice loop: **microphone PCM → Deepgram
 ## Requirements
 
 - Python 3.11+
-- API keys for **OpenAI**, **Deepgram**, and **ElevenLabs** (entered in the Voxera UI and sent to this server per session over WSS; not hardcoded)
+- API keys for **OpenAI**, **Deepgram**, and **ElevenLabs** — either in the browser (dev) or on the server via environment variables (recommended for production; see repo `DEPLOYMENT.md`).
 
 ## Setup
 
@@ -37,7 +37,11 @@ In `voxera-frontend`, set:
 VITE_VOXERA_BACKEND_URL=http://127.0.0.1:8000
 ```
 
-In dev, the app defaults to `http://127.0.0.1:8000` if this variable is omitted. Production builds should set it explicitly.
+In dev, the app defaults to `http://127.0.0.1:8000` if this variable is omitted. Production builds should set it explicitly (HTTPS URL of your API).
+
+## Production (Vercel + AWS EC2)
+
+See the repository root **[DEPLOYMENT.md](../DEPLOYMENT.md)** for Nginx, systemd, Gunicorn, TLS, CORS, and environment variable setup.
 
 The UI connects to `ws(s)://<host>/ws/voice` derived from that base URL.
 

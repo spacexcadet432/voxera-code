@@ -16,6 +16,7 @@ from app.services.deepgram_live import DeepgramLiveSession
 from app.services.elevenlabs_tts import synthesize_speech_mp3
 from app.services.openai_chat import stream_openai_chat
 from app.state.settings import Settings, get_settings
+from app.utils.keys import effective_api_keys
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,22 @@ class VoiceConnection:
         self._alive = asyncio.Event()
         self._initialized = False
         self._stt_first_interim_mono: float | None = None
+        self._last_rx_mono = time.monotonic()
+
+    async def _rx_idle_watchdog(self) -> None:
+        timeout = int(self.settings.voxera_ws_idle_timeout_seconds or 0)
+        if timeout <= 0:
+            return
+        try:
+            while self._alive.is_set():
+                await asyncio.sleep(max(20.0, min(120.0, float(timeout) / 3.0)))
+                if time.monotonic() - self._last_rx_mono > float(timeout):
+                    logger.info("Closing voice WebSocket after %ss without client traffic", timeout)
+                    with contextlib.suppress(Exception):
+                        await self.ws.close(code=1001)
+                    return
+        except asyncio.CancelledError:
+            raise
 
     async def _send(self, event: ServerEvent) -> None:
         await self.ws.send_text(event.model_dump_json(exclude_none=True))
@@ -234,8 +251,9 @@ class VoiceConnection:
         await self._emit_orb("listening")
 
     async def handle_init(self, keys: ApiKeysPayload, ai: AiSettingsPayload) -> None:
-        if not keys.openai.strip() or not keys.deepgram.strip() or not keys.elevenlabs.strip():
-            await self._send(ServerEvent(type="error", message="All three API keys are required."))
+        merged, err = effective_api_keys(keys, self.settings)
+        if err or merged is None:
+            await self._send(ServerEvent(type="error", message=err or "API keys are not configured."))
             return
 
         if self._supervisor_task is not None and not self._supervisor_task.done():
@@ -244,7 +262,7 @@ class VoiceConnection:
                 await self._supervisor_task
             self._supervisor_task = None
 
-        self.keys = keys
+        self.keys = merged
         self.ai = ai
         self._initialized = True
         self._alive.set()
@@ -259,9 +277,14 @@ class VoiceConnection:
         await self._dg.send_pcm(data)
 
     async def run(self) -> None:
+        self._last_rx_mono = time.monotonic()
+        watchdog: asyncio.Task[None] | None = None
+        if self.settings.voxera_ws_idle_timeout_seconds > 0:
+            watchdog = asyncio.create_task(self._rx_idle_watchdog())
         try:
             while True:
                 message = await self.ws.receive()
+                self._last_rx_mono = time.monotonic()
                 mtype = message.get("type")
                 if mtype == "websocket.disconnect":
                     break
@@ -290,15 +313,20 @@ class VoiceConnection:
                         continue
 
                     if ctrl.type == "init":
-                        if ctrl.keys is None or ctrl.aiSettings is None:
+                        if ctrl.aiSettings is None:
                             await self._send(
-                                ServerEvent(type="error", message="init requires keys and aiSettings."),
+                                ServerEvent(type="error", message="init requires aiSettings."),
                             )
                             continue
-                        await self.handle_init(ctrl.keys, ctrl.aiSettings)
+                        keys_payload = ctrl.keys if ctrl.keys is not None else ApiKeysPayload()
+                        await self.handle_init(keys_payload, ctrl.aiSettings)
         except WebSocketDisconnect:
             pass
         finally:
+            if watchdog is not None:
+                watchdog.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watchdog
             self._alive.clear()
             if self._pipeline_task and not self._pipeline_task.done():
                 self._pipeline_task.cancel()

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getVoxeraVoiceWebSocketUrl } from "@/config/backend";
+import { fetchVoiceCapabilities, getVoxeraVoiceWebSocketUrl } from "@/config/backend";
 import { useVoxeraStore } from "@/store/voxeraStore";
 import type { SessionStatus } from "@/store/voxeraStore";
 import type { Turn } from "@/components/TranscriptPanel";
@@ -67,7 +67,12 @@ export function useVoiceSession() {
   const playAmpRafRef = useRef<number>(0);
   const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const pingTimerRef = useRef<number>(0);
+  const watchdogTimerRef = useRef<number>(0);
   const assistantStreamRef = useRef<{ id: string; text: string } | null>(null);
+  /** True while `stop()` is tearing down the socket so `onclose` does not show a spurious error. */
+  const userInitiatedStopRef = useRef(false);
+  const stopRef = useRef<() => void>(() => {});
+  const lastPongAtRef = useRef<number>(Date.now());
 
   const {
     setStatus,
@@ -288,6 +293,7 @@ export function useVoiceSession() {
     (ws: WebSocket) => {
       ws.binaryType = "arraybuffer";
       ws.onmessage = (ev) => {
+        lastPongAtRef.current = Date.now();
         if (typeof ev.data === "string") {
           try {
             const payload = JSON.parse(ev.data) as ServerJson;
@@ -301,6 +307,10 @@ export function useVoiceSession() {
         setError("WebSocket connection error.");
       };
       ws.onclose = () => {
+        if (userInitiatedStopRef.current) {
+          userInitiatedStopRef.current = false;
+          return;
+        }
         if (useVoxeraStore.getState().active) {
           setError("Disconnected from voice backend.");
           setActive(false);
@@ -326,8 +336,14 @@ export function useVoiceSession() {
     }
 
     const { apiKeys, aiSettings } = useVoxeraStore.getState();
-    if (!apiKeys.openai.trim() || !apiKeys.deepgram.trim() || !apiKeys.elevenlabs.trim()) {
-      setError("Add OpenAI, Deepgram, and ElevenLabs keys in API Configuration.");
+    const caps = await fetchVoiceCapabilities();
+    const serverReady = Boolean(caps?.serverKeysComplete);
+    const clientReady =
+      Boolean(apiKeys.openai.trim()) && Boolean(apiKeys.deepgram.trim()) && Boolean(apiKeys.elevenlabs.trim());
+    if (!serverReady && !clientReady) {
+      setError(
+        "Add API keys in API Configuration, or configure OPENAI_API_KEY, DEEPGRAM_API_KEY, and ELEVENLABS_API_KEY on the server.",
+      );
       return;
     }
 
@@ -430,6 +446,7 @@ export function useVoiceSession() {
       });
 
       wireWebSocket(ws);
+      lastPongAtRef.current = Date.now();
 
       processor.onaudioprocess = (e) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -443,6 +460,15 @@ export function useVoiceSession() {
           ws.send(JSON.stringify({ type: "ping" }));
         }
       }, 25000) as unknown as number;
+
+      watchdogTimerRef.current = window.setInterval(() => {
+        if (!useVoxeraStore.getState().active || ws.readyState !== WebSocket.OPEN) return;
+        if (Date.now() - lastPongAtRef.current > 75000) {
+          setError("Voice backend stopped responding. Tap Stop, then Start.");
+          userInitiatedStopRef.current = true;
+          stopRef.current();
+        }
+      }, 30000) as unknown as number;
 
       setActive(true);
       setStatus("listening");
@@ -476,9 +502,15 @@ export function useVoiceSession() {
   ]);
 
   const stop = useCallback(() => {
+    userInitiatedStopRef.current = true;
+
     if (pingTimerRef.current) {
       window.clearInterval(pingTimerRef.current);
       pingTimerRef.current = 0;
+    }
+    if (watchdogTimerRef.current) {
+      window.clearInterval(watchdogTimerRef.current);
+      watchdogTimerRef.current = 0;
     }
 
     try {
@@ -498,6 +530,12 @@ export function useVoiceSession() {
 
     stopPlayback();
 
+    setAnalyser(null);
+    stopAmpLoop();
+    setInterim("");
+    setActive(false);
+    setStatus("idle");
+
     try {
       wsRef.current?.close();
     } catch {
@@ -511,11 +549,7 @@ export function useVoiceSession() {
     audioCtxRef.current?.close().catch(() => {});
     audioCtxRef.current = null;
 
-    setAnalyser(null);
-    stopAmpLoop();
-    setActive(false);
-    setStatus("idle");
-    setInterim("");
+    userInitiatedStopRef.current = false;
   }, [setActive, setAnalyser, setInterim, setStatus, stopAmpLoop, stopPlayback]);
 
   const toggleMute = useCallback(() => {
@@ -535,8 +569,14 @@ export function useVoiceSession() {
   }, [resetConversation]);
 
   useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
+
+  useEffect(() => {
     return () => {
+      userInitiatedStopRef.current = true;
       if (pingTimerRef.current) window.clearInterval(pingTimerRef.current);
+      if (watchdogTimerRef.current) window.clearInterval(watchdogTimerRef.current);
       processorRef.current && (processorRef.current.onaudioprocess = null);
       try {
         processorRef.current?.disconnect();
