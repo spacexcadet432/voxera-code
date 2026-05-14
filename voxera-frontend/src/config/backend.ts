@@ -1,6 +1,6 @@
 /**
- * HTTP base for the Python FastAPI backend (verify routes, health, capabilities).
- * WebSocket URL is derived by swapping http(s) → ws(s), unless overridden.
+ * HTTP base for the local FastAPI backend (health, verify, capabilities).
+ * WebSocket URL is derived by swapping http → ws (or https → wss), unless overridden.
  */
 
 const TRUEISH = new Set(["1", "true", "yes", "on"]);
@@ -10,7 +10,11 @@ export function serverKeysOnlyFromEnv(): boolean {
   return v ? TRUEISH.has(v) : false;
 }
 
-/** Normalize backend URL for production (HTTPS page + HTTP API URL → upgrade to HTTPS). */
+/**
+ * Backend base URL (e.g. http://127.0.0.1:8000 or http://192.168.x.x:8000 on LAN).
+ * In production builds served over HTTPS, an http:// API URL is upgraded to https:// the same host
+ * to avoid mixed-content blocking (harmless for pure local http:// usage).
+ */
 export function getVoxeraBackendBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_VOXERA_BACKEND_URL as string | undefined;
   let trimmed = (fromEnv ?? "").trim().replace(/\/$/, "");

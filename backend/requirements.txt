@@ -1,6 +1,5 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
-gunicorn==23.0.0
 websockets==14.1
 httpx==0.28.1
 pydantic==2.10.3

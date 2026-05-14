@@ -11,14 +11,14 @@ class Settings(BaseSettings):
 
     voxera_host: str = "0.0.0.0"
     voxera_port: int = 8000
-    voxera_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
-    """Comma-separated list of allowed browser origins (e.g. https://app.vercel.app)."""
+    voxera_cors_origins: str = ""
+    """
+    Comma-separated browser origins for CORS.
+    Empty → the app uses `*` (simplest for localhost + same-network devices).
+    """
 
     voxera_cors_origin_regex: str = ""
-    """
-    Optional regex for additional allowed origins (e.g. Vercel preview URLs).
-    Example: https://.*\\.vercel\\.app$
-    """
+    """Optional single regex for extra allowed origins (advanced)."""
 
     voxera_disallow_client_keys: bool = False
     """
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     """
 
     voxera_allowed_hosts: str = ""
-    """Comma-separated hostnames for TrustedHostMiddleware (e.g. api.example.com). Empty disables."""
+    """Comma-separated hostnames for TrustedHostMiddleware. Empty = disabled (typical for local)."""
 
     voxera_log_level: str = "INFO"
 
