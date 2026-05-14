@@ -1,14 +1,38 @@
 import { motion } from "framer-motion";
 
+/** One completed pipeline row (sparklines use stt/llm/tts/total). */
+export interface MetricHistoryRow {
+  stt: number;
+  llm: number;
+  tts: number;
+  total: number;
+}
+
+export interface MetricRunDetail {
+  sttSegmentMs: number;
+  sttPcmToFirstPartialMs: number;
+  llmWallMs: number;
+  llmTtftMs: number | null;
+  ttsWallMs: number;
+  ttsFirstByteMs: number | null;
+  totalMs: number;
+}
+
 export interface Metrics {
   stt: number;
   llm: number;
   tts: number;
   total: number;
-  history: { stt: number; llm: number; tts: number; total: number }[];
+  history: MetricHistoryRow[];
+  /** Latest turn instrumentation from the backend (`metrics.extra`). */
+  lastTelemetry?: {
+    run: MetricRunDetail;
+    aggregate: Record<string, number | string>;
+  };
 }
 
 export function PipelineMetrics({ metrics }: { metrics: Metrics }) {
+  const tel = metrics.lastTelemetry;
   return (
     <div className="glass rounded-2xl p-4 h-full">
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-glass-border">
@@ -18,11 +42,51 @@ export function PipelineMetrics({ metrics }: { metrics: Metrics }) {
         <Activity />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard label="STT" value={metrics.stt} unit="ms" series={metrics.history.map(h => h.stt)} hue={200} />
-        <MetricCard label="LLM" value={metrics.llm} unit="ms" series={metrics.history.map(h => h.llm)} hue={230} />
-        <MetricCard label="TTS" value={metrics.tts} unit="ms" series={metrics.history.map(h => h.tts)} hue={260} />
-        <MetricCard label="TOTAL" value={metrics.total} unit="ms" series={metrics.history.map(h => h.total)} hue={180} />
+        <MetricCard label="STT" value={metrics.stt} unit="ms" series={metrics.history.map((h) => h.stt)} hue={200} />
+        <MetricCard label="LLM" value={metrics.llm} unit="ms" series={metrics.history.map((h) => h.llm)} hue={230} />
+        <MetricCard label="TTS" value={metrics.tts} unit="ms" series={metrics.history.map((h) => h.tts)} hue={260} />
+        <MetricCard label="TOTAL" value={metrics.total} unit="ms" series={metrics.history.map((h) => h.total)} hue={180} />
       </div>
+      {tel && (
+        <div className="mt-4 rounded-lg border border-glass-border bg-background/30 px-3 py-2.5 text-[10px] leading-relaxed text-foreground/65 font-mono tracking-tight">
+          <div className="text-[9px] uppercase tracking-widest text-foreground/45 mb-1.5">Instrumentation (last turn)</div>
+          <div className="grid gap-1 sm:grid-cols-2">
+            <span>
+              LLM TTFT:{" "}
+              <span className="text-foreground/85 tabular-nums">
+                {tel.run.llmTtftMs != null ? `${Math.round(tel.run.llmTtftMs)} ms` : "—"}
+              </span>
+            </span>
+            <span>
+              TTS first byte:{" "}
+              <span className="text-foreground/85 tabular-nums">
+                {tel.run.ttsFirstByteMs != null ? `${Math.round(tel.run.ttsFirstByteMs)} ms` : "—"}
+              </span>
+            </span>
+            <span>
+              STT PCM→1st partial:{" "}
+              <span className="text-foreground/85 tabular-nums">{Math.round(tel.run.sttPcmToFirstPartialMs)} ms</span>
+            </span>
+            <span>
+              STT partial→final:{" "}
+              <span className="text-foreground/85 tabular-nums">{Math.round(tel.run.sttSegmentMs)} ms</span>
+            </span>
+          </div>
+          {tel.aggregate.n > 1 && (
+            <div className="mt-2 pt-2 border-t border-glass-border text-[9px] text-foreground/50">
+              Rolling n={tel.aggregate.n}{" "}
+              · total p50{" "}
+              <span className="text-foreground/75 tabular-nums">
+                {typeof tel.aggregate.total_p50 === "number" ? `${Math.round(tel.aggregate.total_p50)} ms` : "—"}
+              </span>{" "}
+              · total avg{" "}
+              <span className="text-foreground/75 tabular-nums">
+                {typeof tel.aggregate.total_avg === "number" ? `${Math.round(tel.aggregate.total_avg)} ms` : "—"}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

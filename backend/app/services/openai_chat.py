@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from app.services.llm_types import LlmStreamResult
+
 
 async def stream_openai_chat(
     *,
@@ -16,8 +18,8 @@ async def stream_openai_chat(
     system: str,
     temperature: float,
     on_delta: Callable[[str], Coroutine[Any, Any, None]] | None = None,
-) -> tuple[str, float]:
-    """Stream a chat completion; returns (full_reply, latency_seconds)."""
+) -> LlmStreamResult:
+    """Stream a chat completion; returns reply + wall ms + time-to-first-token (TTFT)."""
 
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
@@ -31,8 +33,9 @@ async def stream_openai_chat(
         "stream": True,
     }
 
-    t0 = time.monotonic()
+    t_stream = time.monotonic()
     assembled: list[str] = []
+    ttft_mono: float | None = None
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=20.0)) as client:
         async with client.stream("POST", url, headers=headers, json=body) as resp:
@@ -72,10 +75,14 @@ async def stream_openai_chat(
                         continue
                     delta = (choices[0].get("delta") or {}).get("content")
                     if delta:
+                        if ttft_mono is None:
+                            ttft_mono = time.monotonic()
                         assembled.append(delta)
                         if on_delta is not None:
                             await on_delta(delta)
 
+    t_end = time.monotonic()
+    wall_ms = (t_end - t_stream) * 1000.0
+    ttft_ms = (ttft_mono - t_stream) * 1000.0 if ttft_mono is not None else None
     reply = "".join(assembled).strip()
-    latency = time.monotonic() - t0
-    return reply, latency
+    return LlmStreamResult(reply=reply, wall_ms=wall_ms, ttft_ms=ttft_ms)

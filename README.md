@@ -127,20 +127,38 @@ Leave the three env vars empty and paste keys in the app. They are stored in **l
 - **Binary frames**: little-endian **PCM16**, mono, **16000 Hz** (the frontend downsamples the mic).
 - **Server → client JSON**: `ready`, `interim`, `orb`, `user_turn`, `assistant_turn` / `assistant_delta`, `metrics`, `audio` (MP3 base64), `error`, `pong`.
 
+Each browser tab gets a **`session_id`** (UUID). The backend logs **`voice_ws_accepted`**, **`voice_session_initialized`**, **`deepgram_connected` / `deepgram_socket_closed`**, **`pipeline_turn`** (JSON per completed turn), **`voice_context_reset`**, **`voice_ws_disconnect`**, and **`voice_session_end`** — all suitable for `journalctl`, terminal piping, or a future log sink without adding infrastructure today.
+
 Client **ping** every ~25s keeps NATs and the stall watchdog happy; optional server idle close is controlled by `VOXERA_WS_IDLE_TIMEOUT_SECONDS` (default `0` = off).
 
 ---
 
-## Latency metrics (real, server-side)
+## Latency & instrumentation (measured, not mocked)
 
-Each assistant turn ends with a `metrics` event:
+Every completed turn emits a `metrics` message with **top-level** fields (backward compatible with the sparkline cards):
 
-| Field | Meaning |
-|--------|---------|
-| **stt** | ms from first interim of that utterance to Deepgram `is_final` for the segment |
-| **llm** | Wall time for the OpenAI streaming completion |
-| **tts** | ElevenLabs HTTP round-trip for MP3 |
-| **total** | Wall time from pipeline start (after final transcript) through TTS bytes ready |
+| Field | Definition |
+|--------|------------|
+| **stt** | **STT partial → final** — ms from first **interim** transcript of the segment to Deepgram **`is_final`** for that segment (endpointing / segmentation latency). |
+| **llm** | **LLM wall** — ms from OpenAI **HTTP stream start** until the last streamed token is processed. |
+| **tts** | **TTS wall** — ms from ElevenLabs **request start** until the full MP3 body has been received (streamed download). |
+| **total** | **Turn wall** — ms from the moment a **final** transcript is accepted until TTS bytes are ready to send to the browser. |
+
+The same event includes **`extra`**, a structured payload for engineering depth:
+
+| `extra.run` field | Definition |
+|-------------------|------------|
+| **sttPcmToFirstPartialMs** | **Audio → first partial** — ms from the **last inbound PCM chunk** timestamp to the **first interim** for that segment (batching / capture skew aware; bounded by how often the browser sends audio). |
+| **sttSegmentMs** | Same as top-level **stt**. |
+| **llmTtftMs** | **Time-to-first-token** — ms from OpenAI stream start to the first non-empty `delta.content`. |
+| **llmWallMs** | Same as top-level **llm**. |
+| **ttsFirstByteMs** | **TTS onset / TTFB** — ms until the **first response byte** from ElevenLabs. |
+| **ttsWallMs** | Same as top-level **tts**. |
+| **totalMs** | Same as top-level **total**. |
+
+**Rolling statistics** (last up to 20 turns per WebSocket session): `extra.aggregate` contains **`n`** plus, for each stage key, **`_avg`** and **`_p50`** (median), e.g. `total_avg`, `total_p50`, `llm_ttft_avg`, … — computed only from **positive** samples so missing TTFT does not poison aggregates.
+
+**Structured logs:** each turn also writes one JSON line at **INFO** — `event: pipeline_turn` with `session_id`, character counts, per-run millisecond map, and the rolling aggregate — so the repo demonstrates **observable realtime AI** without external APM.
 
 ---
 

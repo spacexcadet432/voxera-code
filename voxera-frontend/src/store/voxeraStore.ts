@@ -57,7 +57,7 @@ interface RuntimeSlice {
   appendTurn: (turn: Turn) => void;
   patchTurn: (id: string, patch: Partial<Turn>) => void;
   resetConversation: () => void;
-  pushMetric: (entry: Omit<Metrics, "history">) => void;
+  pushMetric: (entry: Omit<Metrics, "history"> & { lastTelemetry?: Metrics["lastTelemetry"] }) => void;
 }
 
 export type VoxeraStore = PersistedSlice & RuntimeSlice;
@@ -105,8 +105,15 @@ export const useVoxeraStore = create<VoxeraStore>()(
       pushMetric: (entry) =>
         set((s) => ({
           metrics: {
-            ...entry,
-            history: [...s.metrics.history, entry].slice(-20),
+            stt: entry.stt,
+            llm: entry.llm,
+            tts: entry.tts,
+            total: entry.total,
+            lastTelemetry: entry.lastTelemetry,
+            history: [
+              ...s.metrics.history,
+              { stt: entry.stt, llm: entry.llm, tts: entry.tts, total: entry.total },
+            ].slice(-20),
           },
         })),
     }),

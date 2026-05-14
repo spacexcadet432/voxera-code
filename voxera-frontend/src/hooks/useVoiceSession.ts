@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Metrics } from "@/components/PipelineMetrics";
 import { fetchVoiceCapabilities, getVoxeraVoiceWebSocketUrl } from "@/config/backend";
 import { useVoxeraStore } from "@/store/voxeraStore";
 import type { SessionStatus } from "@/store/voxeraStore";
@@ -18,6 +19,10 @@ type ServerJson = {
   total?: number;
   format?: string;
   base64?: string;
+  extra?: {
+    run?: Record<string, unknown>;
+    aggregate?: Record<string, number | string>;
+  };
 };
 
 const TARGET_SAMPLE_RATE = 16000;
@@ -265,13 +270,37 @@ export function useVoiceSession() {
         }
         case "metrics": {
           if (
-            typeof payload.stt === "number" &&
-            typeof payload.llm === "number" &&
-            typeof payload.tts === "number" &&
-            typeof payload.total === "number"
+            typeof payload.stt !== "number" ||
+            typeof payload.llm !== "number" ||
+            typeof payload.tts !== "number" ||
+            typeof payload.total !== "number"
           ) {
-            pushMetric({ stt: payload.stt, llm: payload.llm, tts: payload.tts, total: payload.total });
+            return;
           }
+          let lastTelemetry: Metrics["lastTelemetry"] | undefined;
+          const ex = payload.extra;
+          if (ex?.run && typeof ex.run === "object") {
+            const r = ex.run as Record<string, unknown>;
+            lastTelemetry = {
+              run: {
+                sttSegmentMs: Number(r.sttSegmentMs) || 0,
+                sttPcmToFirstPartialMs: Number(r.sttPcmToFirstPartialMs) || 0,
+                llmWallMs: Number(r.llmWallMs) || 0,
+                llmTtftMs: r.llmTtftMs == null ? null : Number(r.llmTtftMs),
+                ttsWallMs: Number(r.ttsWallMs) || 0,
+                ttsFirstByteMs: r.ttsFirstByteMs == null ? null : Number(r.ttsFirstByteMs),
+                totalMs: Number(r.totalMs) || 0,
+              },
+              aggregate: (ex.aggregate as Record<string, number | string>) ?? { n: 0 },
+            };
+          }
+          pushMetric({
+            stt: payload.stt,
+            llm: payload.llm,
+            tts: payload.tts,
+            total: payload.total,
+            ...(lastTelemetry !== undefined ? { lastTelemetry } : {}),
+          });
           return;
         }
         case "audio": {
