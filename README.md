@@ -183,13 +183,7 @@ The backend already binds **`0.0.0.0`** via `python main.py`. Ensure your OS fir
 | No audio playback | Tap **Start** once (user gesture) so the `AudioContext` can resume; iOS/Safari are strict about this. |
 | Verify buttons fail | Backend must be up; `POST /api/verify/*` should return `{ ok: true }` when keys are valid. |
 
----
 
-## Demo / screenshots
-
-Record a short screen capture: orb states, interim transcript, assistant reply, and the pipeline metrics panel updating — that’s the intended “systems demo” loop. (Add your own GIF or images under `docs/` if you like; none are committed here to keep the repo lightweight.)
-
----
 
 ## Repository layout
 
